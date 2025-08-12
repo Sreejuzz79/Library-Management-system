@@ -280,27 +280,36 @@ def admin_dashboard():
     # BOOKS TAB 
     tk.Label(books_frame, text="Books Management", font=("Arial", 14, "bold")).pack(pady=5)
     
-    books_table = ttk.Treeview(books_frame, columns=("ID", "Title", "Author", "Total", "Available"), show="headings", height=10)
+    books_table = ttk.Treeview(books_frame, columns=("ID", "Title", "Author", "Category", "Total", "Available"), show="headings", height=10)
     books_table.heading("ID", text="Book ID")
     books_table.heading("Title", text="Title")
     books_table.heading("Author", text="Author")
+    books_table.heading("Category", text="Category")
     books_table.heading("Total", text="Total Copies")
     books_table.heading("Available", text="Available Copies")
     books_table.pack(fill="both", expand=True, padx=5, pady=5)
 
     def refresh_books_table():
         for item in books_table.get_children():
-            books_table.delete(item)
+             books_table.delete(item)
         try:
-            db = db_connection()
-            cur = db.cursor()
-            cur.execute("SELECT book_id, title, author, total_copies, available_copies FROM books")
-            for row in cur.fetchall():
+          db = db_connection()
+          cur = db.cursor()
+
+        # This query joins books with category to show category name
+          cur.execute("""
+            SELECT b.book_id, b.title, b.author, c.category_name, b.total_copies, b.available_copies
+    FROM books b
+    JOIN categories c ON b.category_id = c.category_id
+    ORDER BY c.category_name, b.title
+        """)
+
+          for row in cur.fetchall():
                 books_table.insert("", "end", values=row)
         except Exception as e:
-            messagebox.showerror("DB Error", str(e))
+              messagebox.showerror("DB Error", str(e))
         finally:
-            db.close()
+              db.close()
 
     refresh_books_table()
 
@@ -354,11 +363,16 @@ def admin_dashboard():
         book_id = books_table.item(selected)["values"][0]
         navigate_to(admin_view_borrowed, book_id)
 
+    def logout():
+        if messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?"):
+            navigate_to(show_main_menu)
+
     tk.Button(book_buttons_frame, text="Add Book", command=add_book, width=12, bg='lightgreen').pack(side="left", padx=5)
     tk.Button(book_buttons_frame, text="Edit Book", command=edit_book, width=12, bg='lightyellow').pack(side="left", padx=5)
     tk.Button(book_buttons_frame, text="Delete Book", command=delete_book, width=12, bg='lightcoral').pack(side="left", padx=5)
     tk.Button(book_buttons_frame, text="View Borrowed", command=view_borrowed, width=12, bg='lightblue').pack(side="left", padx=5)
     tk.Button(book_buttons_frame, text="All Borrowed Books", command=lambda: navigate_to(admin_all_borrowed), width=15, bg='lightcyan').pack(side="left", padx=5)
+    tk.Button(book_buttons_frame, text="Logout", command=logout, width=12, bg='lightgray').pack(side="left", padx=5)
 
     # USERS TAB 
     tk.Label(users_frame, text="Users Management", font=("Arial", 14, "bold")).pack(pady=5)
@@ -375,8 +389,9 @@ def admin_dashboard():
         try:
             db = db_connection()
             cur = db.cursor()
-            cur.execute("SELECT user_id, email, role FROM users")
-            for row in cur.fetchall():
+            cur.execute("SELECT user_id, email,  role FROM users WHERE role='user'")
+            users = cur.fetchall()
+            for row in users:
                 users_table.insert("", "end", values=row)
         except Exception as e:
             messagebox.showerror("DB Error", str(e))
@@ -427,10 +442,18 @@ def admin_dashboard():
             finally:
                 db.close()
 
+
+    def logout():
+        if messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?"):
+            navigate_to(show_main_menu)
+
+
     tk.Button(user_buttons_frame, text="Add User", command=add_user, width=12, bg='lightgreen').pack(side="left", padx=5)
     tk.Button(user_buttons_frame, text="Edit User", command=edit_user, width=12, bg='lightyellow').pack(side="left", padx=5)
     tk.Button(user_buttons_frame, text="Delete User", command=delete_user, width=12, bg='lightcoral').pack(side="left", padx=5)
     tk.Button(user_buttons_frame, text="View User Books", command=lambda: navigate_to(admin_user_borrowed), width=15, bg='lightcyan').pack(side="left", padx=5)
+    tk.Button(user_buttons_frame, text="Logout", command=logout, width=12, bg='lightgray').pack(side="left", padx=5)
+
 
     # Navigation buttons
     nav_frame = tk.Frame(container, bg='white')
@@ -461,6 +484,10 @@ def admin_add_book() :
     tk.Label(form_frame, text="Author:", bg='white').grid(row=1, column=0, sticky="e", padx=5, pady=5)
     author_entry = tk.Entry(form_frame, width=30)
     author_entry.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(form_frame, text="Category:", bg='white').grid(row=3, column=0, sticky="e", padx=5, pady=5)
+    category_entry = tk.Entry(form_frame, width=30)
+    category_entry.grid(row=3, column=1, padx=5, pady=5)
     
     tk.Label(form_frame, text="Total Copies:", bg='white').grid(row=2, column=0, sticky="e", padx=5, pady=5)
     copies_entry = tk.Entry(form_frame, width=30)
@@ -497,64 +524,70 @@ def admin_add_book() :
     tk.Button(button_frame, text="Add Book", command=submit, bg='lightgreen').pack(side="left", padx=5)
     tk.Button(button_frame, text="Cancel", command=lambda: navigate_to(admin_dashboard), bg='lightgray').pack(side="left", padx=5)
 
-# ADMIN EDIT BOOK 
-def admin_edit_book(book_data):
+
+
+# ADMIN ADD BOOK 
+def admin_add_book() :
     for widget in window.winfo_children():
         widget.destroy()
     
     set_background_image(window)
     
     main_frame = create_styled_frame(window)
-    main_frame.place(relx=0.5, rely=0.5, anchor='center', width=450, height=350)
+    main_frame.place(relx=0.5, rely=0.5, anchor='center', width=450, height=400)
 
-    tk.Label(main_frame, text="Edit Book", font=("Arial", 16, "bold"), bg='white').pack(pady=10)
+    tk.Label(main_frame, text="Add New Book", font=("Arial", 16, "bold"), bg='white').pack(pady=10)
     
     form_frame = tk.Frame(main_frame, bg='white')
     form_frame.pack(pady=20)
     
     tk.Label(form_frame, text="Title:", bg='white').grid(row=0, column=0, sticky="e", padx=5, pady=5)
     title_entry = tk.Entry(form_frame, width=30)
-    title_entry.insert(0, book_data[1])
     title_entry.grid(row=0, column=1, padx=5, pady=5)
     
     tk.Label(form_frame, text="Author:", bg='white').grid(row=1, column=0, sticky="e", padx=5, pady=5)
     author_entry = tk.Entry(form_frame, width=30)
-    author_entry.insert(0, book_data[2])
     author_entry.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(form_frame, text="Category:", bg='white').grid(row=2, column=0, sticky="e", padx=5, pady=5)
+    category_entry = tk.Entry(form_frame, width=30)
+    category_entry.grid(row=2, column=1, padx=5, pady=5)
     
-    tk.Label(form_frame, text="Total Copies:", bg='white').grid(row=2, column=0, sticky="e", padx=5, pady=5)
+    tk.Label(form_frame, text="Total Copies:", bg='white').grid(row=3, column=0, sticky="e", padx=5, pady=5)
     copies_entry = tk.Entry(form_frame, width=30)
-    copies_entry.insert(0, str(book_data[3]))
-    copies_entry.grid(row=2, column=1, padx=5, pady=5)
+    copies_entry.grid(row=3, column=1, padx=5, pady=5)
 
     def submit():
         title = title_entry.get().strip()
         author = author_entry.get().strip()
+        category_name = category_entry.get().strip()
         try:
             total_copies = int(copies_entry.get())
         except ValueError:
             messagebox.showerror("Error", "Total copies must be a number")
             return
             
-        if not title or not author or total_copies <= 0:
+        if not title or not author or not category_name or total_copies <= 0:
             messagebox.showerror("Error", "Please fill all fields with valid data")
             return
 
         try:
             db = db_connection()
             cur = db.cursor()
-            # Calculate new available copies
-            borrowed_count = book_data[3] - book_data[4]  # total - available = borrowed
-            new_available = total_copies - borrowed_count
             
-            if new_available < 0:
-                messagebox.showerror("Error", "Total copies cannot be less than currently borrowed copies")
-                return
+            # Check if category exists, if not create it
+            cur.execute("SELECT category_id FROM categories WHERE category_name=%s", (category_name,))
+            category = cur.fetchone()
+            if category:
+                category_id = category[0]
+            else:
+                cur.execute("INSERT INTO categories (category_name) VALUES (%s)", (category_name,))
+                category_id = cur.lastrowid
             
-            cur.execute("UPDATE books SET title=%s, author=%s, total_copies=%s, available_copies=%s WHERE book_id=%s", 
-                       (title, author, total_copies, new_available, book_data[0]))
+            cur.execute("INSERT INTO books (title, author, category_id, total_copies, available_copies) VALUES (%s, %s, %s, %s, %s)", 
+                       (title, author, category_id, total_copies, total_copies))
             db.commit()
-            messagebox.showinfo("Success", "Book updated successfully")
+            messagebox.showinfo("Success", "Book added successfully")
             navigate_to(admin_dashboard)
         except Exception as e:
             messagebox.showerror("DB Error", str(e))
@@ -563,7 +596,7 @@ def admin_edit_book(book_data):
 
     button_frame = tk.Frame(main_frame, bg='white')
     button_frame.pack(pady=20)
-    tk.Button(button_frame, text="Update Book", command=submit, bg='lightgreen').pack(side="left", padx=5)
+    tk.Button(button_frame, text="Add Book", command=submit, bg='lightgreen').pack(side="left", padx=5)
     tk.Button(button_frame, text="Cancel", command=lambda: navigate_to(admin_dashboard), bg='lightgray').pack(side="left", padx=5)
 
 # ADMIN ADD USER
@@ -887,6 +920,8 @@ def admin_view_borrowed(book_id):
     if forward_stack:
         tk.Button(nav_frame, text="Forward", command=go_forward, bg='lightgray').pack(side="left", padx=5)
 
+
+
 # USER DASHBOARD 
 def user_dashboard(user_id):
     for widget in window.winfo_children():
@@ -908,13 +943,23 @@ def user_dashboard(user_id):
     try:
         db = db_connection()
         cur = db.cursor()
-        cur.execute("SELECT book_id, title, total_copies, available_copies FROM books")
+    
+    # Only show books that the user hasn't currently borrowed
+        cur.execute("""
+        SELECT book_id, title, total_copies, available_copies 
+        FROM books 
+        WHERE book_id NOT IN (
+            SELECT book_id 
+            FROM borrowed 
+            WHERE user_id = %s AND return_date IS NULL
+        ) AND available_copies > 0
+     """, (user_id,))  
         for row in cur.fetchall():
             table.insert("", "end", values=row)
     except Exception as e:
         messagebox.showerror("DB Error", str(e))
     finally:
-        db.close()
+      db.close()
 
     def borrow_book():
         selected = table.selection()
@@ -939,34 +984,52 @@ def user_dashboard(user_id):
             db.close()
 
     def return_book():
-        selected = table.selection()
-        if not selected:
-            messagebox.showerror("Error", "Select a book")
+     selected = table.selection()
+     if not selected:
+        messagebox.showerror("Error", "Select a book")
+        return
+     book_id = table.item(selected)["values"][0]
+    
+     try:
+        db = db_connection()
+        cur = db.cursor()
+        
+        # First check if the user has actually borrowed this book
+        cur.execute("""
+            SELECT COUNT(*) 
+            FROM borrowed 
+            WHERE user_id=%s AND book_id=%s AND return_date IS NULL
+        """, (user_id, book_id))
+        
+        if cur.fetchone()[0] == 0:
+            messagebox.showerror("Error", "You haven't borrowed this book")
             return
-        book_id = table.item(selected)["values"][0]
-        try:
-            db = db_connection()
-            cur = db.cursor()
-            cur.execute("""
-                UPDATE borrowed 
-                SET return_date = NOW() 
-                WHERE user_id=%s AND book_id=%s AND return_date IS NULL
-            """, (user_id, book_id))
-            cur.execute("UPDATE books SET available_copies = available_copies + 1 WHERE book_id=%s", (book_id,))
-            db.commit()
-            messagebox.showinfo("Success", "Book returned successfully")
-            navigate_to(user_dashboard, user_id)
-        except Exception as e:
-            messagebox.showerror("DB Error", str(e))
-        finally:
-            db.close()
+            
+        # If the user has borrowed the book, proceed with return
+        cur.execute("""
+            UPDATE borrowed 
+            SET return_date = NOW() 
+            WHERE user_id=%s AND book_id=%s AND return_date IS NULL
+        """, (user_id, book_id))
+        cur.execute("UPDATE books SET available_copies = available_copies + 1 WHERE book_id=%s", (book_id,))
+        db.commit()
+        messagebox.showinfo("Success", "Book returned successfully")
+        navigate_to(user_dashboard, user_id)
+     except Exception as e:
+        messagebox.showerror("DB Error", str(e))
+     finally:
+        db.close()
+
+    def logout():
+        if messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?"):
+            navigate_to(show_main_menu)
 
     button_frame = tk.Frame(container, bg='white')
     button_frame.pack(pady=10)
     tk.Button(button_frame, text="Borrow Book", command=borrow_book, bg='lightgreen').pack(pady=5)
-    tk.Button(button_frame, text="Return Book", command=return_book, bg='lightcoral').pack(pady=5)
     tk.Button(button_frame, text="My Borrowed Books", command=lambda: navigate_to(user_borrowed_books, user_id), bg='lightblue').pack(pady=5)
-    
+    tk.Button(button_frame, text="Logout", command=logout, bg='lightgray').pack(pady=5)
+
     nav_frame = tk.Frame(container, bg='white')
     nav_frame.pack(pady=5)
     tk.Button(nav_frame, text="Back", command=go_back, bg='lightgray').pack(side="left", padx=5)
